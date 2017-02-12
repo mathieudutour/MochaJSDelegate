@@ -21,14 +21,6 @@ module.exports = function (selectorHandlerDict, superclass) {
       For some reason, Mocha acts weird about arguments: https://github.com/logancollins/Mocha/issues/28
       We have to basically create a dynamic handler with a likewise dynamic number of predefined arguments.
     */
-    function dynamicHandler () {
-      var functionToCall = handlers[selectorString]
-
-      if (!functionToCall) { return }
-
-      return functionToCall.apply(delegateClassDesc, arguments)
-    }
-
     if (!handlerHasBeenSet) {
       var args = []
       var regex = /:/g
@@ -36,7 +28,7 @@ module.exports = function (selectorHandlerDict, superclass) {
         args.push('arg' + args.length)
       }
 
-      var dynamicFunction = eval('(function (' + args.join(', ') + ') { return dynamicHandler.apply(this, arguments); })')
+      var dynamicFunction = eval('(function (' + args.join(', ') + ') { return handlers[selectorString].apply(this, arguments); })')
 
       delegateClassDesc.addInstanceMethodWithSelector_function_(selector, dynamicFunction)
     }
