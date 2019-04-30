@@ -1,18 +1,21 @@
-/* globals NSUUID MOClassDescription NSObject NSSelectorFromString NSClassFromString */
+/* globals MOClassDescription, NSObject, NSSelectorFromString, NSClassFromString, MOPropertyDescription */
 
-module.exports = function (selectorHandlerDict, superclass) {
-  var uniqueClassName = 'MochaJSDelegate_DynamicClass_' + NSUUID.UUID().UUIDString()
+module.exports = function MochaDelegate(definition, superclass) {
+  var uniqueClassName =
+    'MochaJSDelegate_DynamicClass_' + NSUUID.UUID().UUIDString()
 
-  var delegateClassDesc = MOClassDescription.allocateDescriptionForClassWithName_superclass_(uniqueClassName, superclass || NSObject)
+  var delegateClassDesc = MOClassDescription.allocateDescriptionForClassWithName_superclass_(
+    uniqueClassName,
+    superclass || NSObject
+  )
 
-  delegateClassDesc.registerClass()
-
-  // Storage Handlers
+  // Storage
   var handlers = {}
+  var ivars = {}
 
-  // Define interface
-  this.setHandlerForSelector = function (selectorString, func) {
-    var handlerHasBeenSet = (selectorString in handlers)
+  // Define an instance method
+  function setHandlerForSelector(selectorString, func) {
+    var handlerHasBeenSet = selectorString in handlers
     var selector = NSSelectorFromString(selectorString)
 
     handlers[selectorString] = func
@@ -28,36 +31,66 @@ module.exports = function (selectorHandlerDict, superclass) {
         args.push('arg' + args.length)
       }
 
-      var dynamicFunction = eval('(function (' + args.join(', ') + ') { return handlers[selectorString].apply(this, arguments); })')
+      // eslint-disable-next-line no-eval
+      var dynamicFunction = eval(
+        '(function (' +
+          args.join(', ') +
+          ') { return handlers[selectorString].apply(this, arguments); })'
+      )
 
-      delegateClassDesc.addInstanceMethodWithSelector_function_(selector, dynamicFunction)
+      delegateClassDesc.addInstanceMethodWithSelector_function(
+        selector,
+        dynamicFunction
+      )
     }
   }
 
-  this.removeHandlerForSelector = function (selectorString) {
-    delete handlers[selectorString]
+  // define a property
+  function setIvar(key, value) {
+    var ivarHasBeenSet = key in handlers
+
+    ivars[key] = value
+
+    if (!ivarHasBeenSet) {
+      delegateClassDesc.addInstanceVariableWithName_typeEncoding(key, '@')
+      var description = MOPropertyDescription.new()
+      description.name = key
+      description.typeEncoding = '@'
+      description.weak = true
+      description.ivarName = key
+      delegateClassDesc.addProperty(description)
+    }
   }
 
-  this.getHandlerForSelector = function (selectorString) {
-    return handlers[selectorString]
-  }
-
-  this.getAllHandlers = function () {
-    return handlers
-  }
-
-  this.getClass = function () {
+  this.getClass = function() {
     return NSClassFromString(uniqueClassName)
   }
 
-  this.getClassInstance = function () {
-    return NSClassFromString(uniqueClassName).new()
+  this.getClassInstance = function(instanceVariables) {
+    var instance = NSClassFromString(uniqueClassName).new()
+    Object.keys(ivars).forEach(function(key) {
+      instance[key] = ivars[key]
+    })
+    Object.keys(instanceVariables || {}).forEach(function(key) {
+      instance[key] = instanceVariables[key]
+    })
+    return instance
   }
+  // alias
+  this.new = this.getClassInstance
 
   // Convenience
-  if (typeof selectorHandlerDict === 'object') {
-    for (var selectorString in selectorHandlerDict) {
-      this.setHandlerForSelector(selectorString, selectorHandlerDict[selectorString])
-    }
+  if (typeof definition === 'object') {
+    Object.keys(definition).forEach(
+      function(key) {
+        if (typeof definition[key] === 'function') {
+          setHandlerForSelector(key, definition[key])
+        } else {
+          setIvar(key, definition[key])
+        }
+      }
+    )
   }
+
+  delegateClassDesc.registerClass()
 }
